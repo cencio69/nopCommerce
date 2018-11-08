@@ -1,12 +1,6 @@
-using System;
-using System.Data;
-using System.Data.Common;
 using System.Linq;
-using System.Reflection;
 using Microsoft.EntityFrameworkCore;
-using Nop.Core;
-using Nop.Data;
-using Nop.Data.Mapping;
+using Npgsql;
 
 namespace Nop.Plugin.Data.PostgreSQL.Data
 {
@@ -26,15 +20,22 @@ namespace Nop.Plugin.Data.PostgreSQL.Data
 
         protected override string CreateSqlWithParameters(string sql, params object[] parameters)
         {
-            var paramstring = String.Empty;
-            for (var i = 0; i <= (parameters?.Length ?? 0) - 1; i++)
-            {
-                if (!(parameters[i] is Npgsql.NpgsqlParameter parameter))
-                    continue;
-                paramstring = $"{paramstring}{(i > 0 ? "," : string.Empty)} @{parameter.ParameterName}";
-            }
-            paramstring = paramstring.TrimEnd(',');
-            sql = $"SELECT * FROM {sql} ({paramstring})";
+            var paramstring =
+                parameters?.Select(p => p as NpgsqlParameter).Where(p => p != null).Select(p => p.ParameterName)
+                    .Aggregate(string.Empty, (all, curent) => $"{all}, {curent}").TrimStart(',', ' ');
+
+            //if (parameters != null)
+            //{
+            //    for (var i = 0; i < parameters.Length; i++)
+            //    {
+            //        if (!(parameters[i] is NpgsqlParameter parameter))
+            //            continue;
+
+            //        paramstring = $"{paramstring}{(i > 0 ? "," : string.Empty)} @{parameter.ParameterName}";
+            //    }
+            //}
+           
+            sql = $"SELECT * FROM {sql} ({paramstring ?? string.Empty})";
 
             return sql;
         }

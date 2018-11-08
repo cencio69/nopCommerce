@@ -12,7 +12,7 @@ using Nop.Services.Events;
 using Nop.Services.Localization;
 using Nop.Services.Logging;
 
-namespace Nop.Plugin.Data.MySQL.Services.Localization
+namespace Nop.Plugin.Data.PostgreSQL.Services.Localization
 {
     public class LocalizationService : Nop.Services.Localization.LocalizationService
     {

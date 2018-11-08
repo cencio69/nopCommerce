@@ -1,4 +1,4 @@
-﻿namespace Nop.Plugin.Data.MySQL.Data
+﻿namespace Nop.Plugin.Data.PostgreSQL.Data
 {
     /// <summary>
     /// Represents default values related to Nop data

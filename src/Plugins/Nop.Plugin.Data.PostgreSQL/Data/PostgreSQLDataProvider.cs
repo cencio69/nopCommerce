@@ -14,7 +14,6 @@ namespace Nop.Plugin.Data.PostgreSQL.Data
     /// <summary>
     /// Represents SQL Server data provider
     /// </summary>
-    /// <param name="tablename">Used table name</param>
     class PostgreSQLDataProvider : IDataProvider
     {
         #region Methods

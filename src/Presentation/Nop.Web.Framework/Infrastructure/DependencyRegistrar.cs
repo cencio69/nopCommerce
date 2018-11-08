@@ -1,10 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Autofac;
-using Autofac.Builder;
-using Autofac.Core;
 using Microsoft.AspNetCore.Mvc.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Nop.Core;
@@ -84,7 +80,6 @@ namespace Nop.Web.Framework.Infrastructure
             builder.Register(context => context.Resolve<IDataProviderManager>().DataProvider).As<IDataProvider>().InstancePerDependency();
 
             InitDbContext(builder, typeFinder, config);
-
 
             //repositories
             builder.RegisterGeneric(typeof(EfRepository<>)).As(typeof(IRepository<>)).InstancePerLifetimeScope();
@@ -228,7 +223,6 @@ namespace Nop.Web.Framework.Infrastructure
             builder.RegisterType<SubscriptionService>().As<ISubscriptionService>().SingleInstance();
             builder.RegisterType<SettingService>().As<ISettingService>().InstancePerLifetimeScope();
 
-
             builder.RegisterType<ActionContextAccessor>().As<IActionContextAccessor>().InstancePerLifetimeScope();
 
             //register all settings
@@ -265,7 +259,6 @@ namespace Nop.Web.Framework.Infrastructure
             InitDbDepedency(builder, typeFinder, config);
         }
 
-
         /// <summary>
         /// Init dependencies for database
         /// </summary>
@@ -274,21 +267,18 @@ namespace Nop.Web.Framework.Infrastructure
         /// <param name="config">Config</param>
         private void InitDbDepedency(ContainerBuilder builder, ITypeFinder typeFinder, NopConfig config)
         {
+            if (!DataSettingsManager.DatabaseIsInstalled) 
+                return;
 
-            if (DataSettingsManager.DatabaseIsInstalled)
-            {
-                IDataProvider dp = new EfDataProviderManager().DataProvider;
+            var dp = new EfDataProviderManager().DataProvider;
 
+            if (dp.DataProviderName.Equals("SqlServer", StringComparison.CurrentCultureIgnoreCase)) 
+                return;
 
-                if (dp.DataProviderName != "SqlServer")
-                {
-                    var providerTypes = typeFinder.FindClassesOfType<IDataProvider>();
-                    var dbDependencyTypes = typeFinder.FindClassesOfType<IDbDependencyRegistrar>();
-                    var dbDependencyType = dbDependencyTypes.Select(p => p).Where(p => p.Assembly == dp.GetType().Assembly).FirstOrDefault();
-                    var dbDependency = (IDbDependencyRegistrar)Activator.CreateInstance(dbDependencyType);
-                    dbDependency.Register(builder, typeFinder, config);
-                }
-            }
+            var dbDependencyTypes = typeFinder.FindClassesOfType<IDbDependencyRegistrar>();
+            var dbDependencyType = dbDependencyTypes.FirstOrDefault(p => p.Assembly == dp.GetType().Assembly);
+            var dbDependency = (IDbDependencyRegistrar)Activator.CreateInstance(dbDependencyType);
+            dbDependency.Register(builder, typeFinder, config);
         }
 
         /// <summary>
@@ -299,27 +289,25 @@ namespace Nop.Web.Framework.Infrastructure
         /// <param name="config">Config</param>
         private void InitDbContext(ContainerBuilder builder, ITypeFinder typeFinder, NopConfig config)
         {
-            var _pluginFinder = new PluginFinder(null);
-            var instaledPluginsAssemblies = PluginManager.InstalledPlugins.Select(p => p.ReferencedAssembly).ToList();
-
             if (DataSettingsManager.DatabaseIsInstalled)
             {
-                IDataProvider dp = new EfDataProviderManager().DataProvider;
+                var dp = new EfDataProviderManager().DataProvider;
 
-                if (dp.DataProviderName == "SqlServer")
+                if (dp.DataProviderName.Equals("SqlServer", StringComparison.CurrentCultureIgnoreCase))
                 {
                     builder.Register(context => new NopObjectContext(context.Resolve<DbContextOptions<NopObjectContext>>()))
                         .As<IDbContext>().InstancePerLifetimeScope();
-                    return;
                 }
                 else
                 {
                     var dbDependencyTypes = typeFinder.FindClassesOfType<IDbContextRegistrar>();
-                    var dbDependencyType = dbDependencyTypes.Select(p => p).Where(p => p.Assembly == dp.GetType().Assembly).FirstOrDefault();
-                    if (!instaledPluginsAssemblies.Contains(dbDependencyType.Assembly))
+                    var dbDependencyType = dbDependencyTypes.FirstOrDefault(p => p.Assembly == dp.GetType().Assembly);
+                    
+                    if (dbDependencyType == null || PluginManager.InstalledPlugins.All(p => p.ReferencedAssembly != dbDependencyType.Assembly))
                     {
                         return;
                     }
+
                     var dbDependency = (IDbContextRegistrar)Activator.CreateInstance(dbDependencyType);
                     dbDependency.Register(builder, typeFinder, config);
                 }
@@ -335,73 +323,12 @@ namespace Nop.Web.Framework.Infrastructure
                     var dbDependency = (IDbContextRegistrar)Activator.CreateInstance(dbDependencyType);
                     dbDependency.Register(builder, typeFinder, config);
                 }
-
             }
         }
-
 
         /// <summary>
         /// Gets order of this dependency registrar implementation
         /// </summary>
-        public int Order
-        {
-            get { return 0; }
-        }
+        public int Order => 0;
     }
-
-
-    /// <summary>
-    /// Setting source
-    /// </summary>
-    public class SettingsSource : IRegistrationSource
-    {
-        static readonly MethodInfo BuildMethod = typeof(SettingsSource).GetMethod(
-            "BuildRegistration",
-            BindingFlags.Static | BindingFlags.NonPublic);
-
-        /// <summary>
-        /// Registrations for
-        /// </summary>
-        /// <param name="service">Service</param>
-        /// <param name="registrations">Registrations</param>
-        /// <returns>Registrations</returns>
-        public IEnumerable<IComponentRegistration> RegistrationsFor(
-            Service service,
-            Func<Service, IEnumerable<IComponentRegistration>> registrations)
-        {
-            var ts = service as TypedService;
-            if (ts != null && typeof(ISettings).IsAssignableFrom(ts.ServiceType))
-            {
-                var buildMethod = BuildMethod.MakeGenericMethod(ts.ServiceType);
-                yield return (IComponentRegistration)buildMethod.Invoke(null, null);
-            }
-        }
-
-        static IComponentRegistration BuildRegistration<TSettings>() where TSettings : ISettings, new()
-        {
-            return RegistrationBuilder
-                .ForDelegate((c, p) =>
-                {
-                    var currentStoreId = c.Resolve<IStoreContext>().CurrentStore.Id;
-                    //uncomment the code below if you want load settings per store only when you have two stores installed.
-                    //var currentStoreId = c.Resolve<IStoreService>().GetAllStores().Count > 1
-                    //    c.Resolve<IStoreContext>().CurrentStore.Id : 0;
-
-                    //although it's better to connect to your database and execute the following SQL:
-                    //DELETE FROM [Setting] WHERE [StoreId] > 0
-                    return c.Resolve<ISettingService>().LoadSetting<TSettings>(currentStoreId);
-                })
-                .InstancePerLifetimeScope()
-                .CreateRegistration();
-        }
-
-        /// <summary>
-        /// Is adapter for individual components
-        /// </summary>
-        public bool IsAdapterForIndividualComponents { get { return false; } }
-
-
-
-    }
-
 }

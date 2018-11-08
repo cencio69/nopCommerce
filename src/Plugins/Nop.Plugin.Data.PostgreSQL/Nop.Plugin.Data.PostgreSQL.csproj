@@ -46,6 +46,7 @@
   <ItemGroup>
     <Folder Include="Components\" />
     <Folder Include="Controllers\" />
+    <Folder Include="Install\" />
     <Folder Include="Services\" />
   </ItemGroup>
 
